@@ -20,6 +20,7 @@ import ra.edu.it211_project.service.GradingService;
 @Service
 @RequiredArgsConstructor
 public class GradingServiceImpl implements GradingService {
+
     private final SubmissionRepository submissionRepository;
     private final UserRepository userRepository;
     private final CourseRepository courseRepository;
@@ -33,7 +34,6 @@ public class GradingServiceImpl implements GradingService {
         Submission submission = submissionRepository.findById(request.getSubmissionId())
                 .orElseThrow(() -> new ResourceNotFoundException("Submission not found"));
 
-        // Verify lecturer teaches this course
         if (submission.getCourse().getLecturer() == null ||
                 !submission.getCourse().getLecturer().getId().equals(lecturer.getId())) {
             throw new InvalidStateException("You are not assigned to grade this submission");
@@ -48,9 +48,18 @@ public class GradingServiceImpl implements GradingService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public Page<SubmissionResponse> getSubmissionsByCourse(Long courseId, Pageable pageable) {
         return submissionRepository.findByCourseId(courseId, pageable)
                 .map(this::mapToResponse);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public SubmissionResponse getSubmissionById(Long id) {
+        Submission submission = submissionRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Submission not found with id: " + id));
+        return mapToResponse(submission);
     }
 
     private SubmissionResponse mapToResponse(Submission submission) {

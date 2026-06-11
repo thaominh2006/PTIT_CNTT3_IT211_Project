@@ -8,4 +8,5 @@ import ra.edu.it211_project.dto.response.SubmissionResponse;
 public interface GradingService {
     SubmissionResponse gradeSubmission(GradeRequest request, String lecturerUsername);
     Page<SubmissionResponse> getSubmissionsByCourse(Long courseId, Pageable pageable);
+    SubmissionResponse getSubmissionById(Long id);
 }
