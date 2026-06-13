@@ -15,18 +15,15 @@ import ra.edu.it211_project.dto.response.ApiResponse;
 import ra.edu.it211_project.dto.response.AuthResponse;
 import ra.edu.it211_project.dto.response.RegisterResponse;
 import ra.edu.it211_project.entity.RoleEnum;
-import ra.edu.it211_project.entity.TokenBlacklist;
 import ra.edu.it211_project.entity.User;
 import ra.edu.it211_project.exception.DuplicateResourceException;
 import ra.edu.it211_project.exception.InvalidStateException;
 import ra.edu.it211_project.exception.ResourceNotFoundException;
-import ra.edu.it211_project.repository.TokenBlacklistRepository;
 import ra.edu.it211_project.repository.UserRepository;
 import ra.edu.it211_project.security.service.JwtService;
+import ra.edu.it211_project.security.service.RedisTokenBlacklistService;
 import ra.edu.it211_project.service.AuthService;
 
-import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.Date;
 
 @Service
@@ -35,7 +32,7 @@ import java.util.Date;
 public class AuthServiceImpl implements AuthService {
 
     private final UserRepository userRepository;
-    private final TokenBlacklistRepository tokenBlacklistRepository;
+    private final RedisTokenBlacklistService redisTokenBlacklistService;
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
@@ -88,7 +85,6 @@ public class AuthServiceImpl implements AuthService {
 
         log.info("New STUDENT registered: {}", saved.getUsername());
 
-        // Chỉ trả về thông tin user, KHÔNG tạo token
         return RegisterResponse.builder()
                 .userId(saved.getId())
                 .username(saved.getUsername())
@@ -123,26 +119,22 @@ public class AuthServiceImpl implements AuthService {
                 .build();
     }
 
+    /**
+     * FR-13-AF3: Logout sử dụng Redis Blacklist thay vì lưu vào Database.
+     * - Key = token, TTL = thời gian còn lại đến khi token hết hạn tự nhiên.
+     * - Redis tự động xóa key khi TTL về 0, tránh phình bảng DB và tắc nghẽn truy vấn.
+     */
     @Override
-    @Transactional
     public ApiResponse<Void> logout(String token) {
         String username = jwtService.extractUsername(token);
-        User user = userRepository.findByUsername(username)
+        userRepository.findByUsername(username)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         Date expiration = jwtService.extractExpiration(token);
-        LocalDateTime expiresAt = expiration.toInstant()
-                .atZone(ZoneId.systemDefault()).toLocalDateTime();
+        long remainingMillis = expiration.getTime() - System.currentTimeMillis();
 
-        TokenBlacklist blacklistedToken = TokenBlacklist.builder()
-                .tokenString(token)
-                .revokedAt(LocalDateTime.now())
-                .expiresAt(expiresAt)
-                .user(user)
-                .build();
-
-        tokenBlacklistRepository.save(blacklistedToken);
-        log.info("Token revoked for user: {}", username);
+        redisTokenBlacklistService.blacklistToken(token, remainingMillis);
+        log.info("Token revoked (Redis) for user: {}", username);
 
         return ApiResponse.success("Logged out successfully", null);
     }

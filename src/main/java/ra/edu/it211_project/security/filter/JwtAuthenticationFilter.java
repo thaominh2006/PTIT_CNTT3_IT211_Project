@@ -1,8 +1,5 @@
 package ra.edu.it211_project.security.filter;
 
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
-import org.springframework.web.filter.OncePerRequestFilter;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -13,8 +10,10 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
-import ra.edu.it211_project.repository.TokenBlacklistRepository;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
 import ra.edu.it211_project.security.service.JwtService;
+import ra.edu.it211_project.security.service.RedisTokenBlacklistService;
 import ra.edu.it211_project.security.service.UserDetailsServiceImpl;
 
 import java.io.IOException;
@@ -23,9 +22,10 @@ import java.io.IOException;
 @RequiredArgsConstructor
 @Slf4j
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
+
     private final JwtService jwtService;
     private final UserDetailsServiceImpl userDetailsService;
-    private final TokenBlacklistRepository tokenBlacklistRepository;
+    private final RedisTokenBlacklistService redisTokenBlacklistService;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -41,10 +41,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         final String jwt = authHeader.substring(7);
 
         try {
-            // Check if token is blacklisted
-            if (tokenBlacklistRepository.existsByTokenString(jwt)) {
+            // FR-13-AF3: Kiểm tra blacklist qua Redis (O(1), không truy vấn DB)
+            if (redisTokenBlacklistService.isTokenBlacklisted(jwt)) {
                 log.warn("Attempt to use revoked token from IP: {}", request.getRemoteAddr());
                 response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                response.setContentType("application/json");
                 response.getWriter().write("{\"error\": \"Token has been revoked\"}");
                 return;
             }
