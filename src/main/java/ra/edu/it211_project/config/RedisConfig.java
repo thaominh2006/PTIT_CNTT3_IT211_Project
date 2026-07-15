@@ -1,6 +1,8 @@
 package ra.edu.it211_project.config;
 
+import org.hibernate.sql.Template;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.cache.CacheProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
